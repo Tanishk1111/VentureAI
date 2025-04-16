@@ -12,3 +12,4 @@ google-cloud-aiplatform==1.36.4
 pydantic==2.4.2
 starlette==0.27.0
 python-dotenv==1.0.0
+gunicorn==20.1.0
