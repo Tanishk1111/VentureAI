@@ -1,0 +1,14 @@
+fastapi==0.103.1
+uvicorn==0.23.2
+google-generativeai==0.3.0
+python-multipart==0.0.6
+python-docx==0.8.11
+PyPDF2==3.0.1
+PyMuPDF==1.22.5
+pandas==2.0.3
+google-cloud-texttospeech==2.14.1
+google-cloud-speech==2.21.0
+google-cloud-aiplatform==1.36.4
+pydantic==2.4.2
+starlette==0.27.0
+python-dotenv==1.0.0
