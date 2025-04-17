@@ -27,4 +27,4 @@ RUN touch data/questions.csv
 ENV PORT=8080
 
 # Command to run the application
-CMD exec gunicorn -w 1 -k uvicorn.workers.UvicornWorker main:app --bind 0.0.0.0:${PORT} --timeout 300 
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 300 -k uvicorn.workers.UvicornWorker main:app 

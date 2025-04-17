@@ -38,9 +38,11 @@ jobs:
           service: ventureai
           image: gcr.io/${{ secrets.GCP_PROJECT_ID }}/ventureai:${{ github.sha }}
           region: us-central1
-          flags: --timeout=600s
+          flags: --timeout=600s --memory=512Mi --cpu=1 --min-instances=1 --max-instances=10 --verbosity=debug --log-http
           env_vars: |
             ENVIRONMENT=production
 
       - name: Show Output
-        run: echo ${{ steps.deploy.outputs.url }}
+        run: |
+          echo "Deployed URL: ${{ steps.deploy.outputs.url }}"
+          echo "View logs at: https://console.cloud.google.com/run/detail/us-central1/ventureai/logs"
