@@ -1,6 +1,11 @@
 import os
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("config")
 
 # Load environment variables from .env file if it exists
 load_dotenv()
@@ -62,26 +67,33 @@ class Settings(BaseSettings):
     # Validate the config
     def validate_settings(self) -> bool:
         """Validate that the settings are properly configured"""
-        errors = []
+        warnings = []
         
         if not os.path.exists(self.GOOGLE_APPLICATION_CREDENTIALS):
-            errors.append(f"Google credentials file not found: {self.GOOGLE_APPLICATION_CREDENTIALS}")
+            warnings.append(f"Google credentials file not found: {self.GOOGLE_APPLICATION_CREDENTIALS}")
+            logger.warning(f"Google credentials file not found: {self.GOOGLE_APPLICATION_CREDENTIALS}")
         
         if not os.path.exists(self.QUESTIONS_CSV):
-            errors.append(f"Questions CSV file not found: {self.QUESTIONS_CSV}")
+            # Create the questions CSV file if it doesn't exist
+            os.makedirs(os.path.dirname(self.QUESTIONS_CSV), exist_ok=True)
+            with open(self.QUESTIONS_CSV, 'w') as f:
+                f.write("category,question\n")
+            logger.warning(f"Created empty questions CSV file: {self.QUESTIONS_CSV}")
         
         if not self.API_KEY or self.API_KEY == "YOUR_API_KEY":
-            errors.append("API_KEY not properly configured")
+            warnings.append("API_KEY not properly configured")
+            logger.warning("API_KEY not properly configured, some features may be limited")
         
-        if errors:
-            print("Configuration validation errors:")
-            for error in errors:
-                print(f"- {error}")
-            return False
+        if warnings:
+            logger.warning("Configuration validation warnings:")
+            for warning in warnings:
+                logger.warning(f"- {warning}")
+            # Return True anyway, allowing the application to start with warnings
+            return True
         
         return True
 
 settings = Settings()
 
-# Validate settings on import (optional)
-# settings.validate_settings()
+# Log settings validation results but don't prevent app from starting
+settings.validate_settings()
