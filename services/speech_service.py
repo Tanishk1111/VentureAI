@@ -3,6 +3,13 @@ import io
 from google.cloud import texttospeech as tts
 from google.cloud import speech
 from config import settings
+import logging
+import tempfile
+import time
+import base64
+import traceback
+
+logger = logging.getLogger(__name__)
 
 # Initialize clients
 tts_client = tts.TextToSpeechClient()
@@ -51,87 +58,147 @@ def format_text_as_ssml(text):
     ssml = f'<speak>{text}</speak>'
     return ssml
 
-def text_to_speech(text):
-    """Convert text to speech with enhanced voices and SSML"""
+def text_to_speech(text, voice_name="en-US-Studio-O"):
+    """
+    Convert text to speech using Google Cloud Text-to-Speech API
+    Returns raw audio bytes in WAV format
+    """
     try:
-        # Format text as SSML for better speech quality
-        ssml = format_text_as_ssml(text)
-        synthesis_input = tts.SynthesisInput(ssml=ssml)
+        # Try to get the client from our cloud manager
+        try:
+            from utils.google_cloud import cloud_manager
+            client = cloud_manager.get_tts_client()
+            
+            if client is None:
+                logger.warning("TTS client not available, using fallback mechanism")
+                return generate_fallback_tts(text)
+        except Exception as e:
+            logger.error(f"Error getting TTS client: {e}")
+            return generate_fallback_tts(text)
         
-        response = tts_client.synthesize_speech(
-            input=synthesis_input, voice=voice, audio_config=audio_config
-        )
-        
-        return response.audio_content
-    except Exception as e:
-        print(f"Error in text-to-speech: {e}")
-        # Fallback to basic TTS without SSML
+        # Construct the synthesis input
         synthesis_input = tts.SynthesisInput(text=text)
-        response = tts_client.synthesize_speech(
-            input=synthesis_input, voice=voice, audio_config=audio_config
-        )
-        return response.audio_content
-
-def speech_to_text(audio_data):
-    """Transcribe audio using Google Speech-to-Text with enhanced configuration"""
-    audio = speech.RecognitionAudio(content=audio_data)
-    
-    # Check if this is a WEBM file (from browser recording)
-    is_webm = False
-    try:
-        # Check for WEBM header signature
-        if audio_data[:4] == b'\x1a\x45\xdf\xa3' or b'webm' in audio_data[:50]:
-            is_webm = True
-    except:
-        pass
-    
-    # Add industry-specific phrases to improve recognition accuracy
-    speech_contexts = speech.SpeechContext(
-        phrases=[
-            "venture capital", "startup", "funding", "investment",
-            "MVP", "product market fit", "acquisition", "ROI", "CAC", 
-            "LTV", "churn", "valuation", "runway", "burn rate",
-            "user acquisition", "monetization", "scaling", "series A",
-            "angel investor", "pitch deck", "business model"
-        ]
-    )
-    
-    if is_webm:
-        # For browser-recorded audio (typically WEBM format at 48000 Hz)
-        config = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.WEBM_OPUS,
+        
+        # Configure voice parameters
+        voice = tts.VoiceSelectionParams(
             language_code="en-US",
-            enable_automatic_punctuation=True,
-            model="latest_long",
-            use_enhanced=True,
-            speech_contexts=[speech_contexts],
-            enable_speaker_diarization=False,
-            diarization_speaker_count=1,
-            profanity_filter=False
+            name=voice_name,
         )
-    else:
-        # For regular audio (e.g., wav files)
+        
+        # Select the audio encoding
+        audio_config = tts.AudioConfig(
+            audio_encoding=tts.AudioEncoding.LINEAR16,  # WAV format
+            speaking_rate=1.0,
+            pitch=0.0,
+            volume_gain_db=0.0,
+            sample_rate_hertz=24000,
+        )
+        
+        # Perform the API call
+        response = client.synthesize_speech(
+            input=synthesis_input,
+            voice=voice,
+            audio_config=audio_config
+        )
+        
+        return response.audio_content
+        
+    except Exception as e:
+        logger.error(f"Error in text_to_speech: {e}")
+        logger.error(traceback.format_exc())
+        return generate_fallback_tts(text)
+
+def speech_to_text(audio_data, language_code="en-US", model="latest_long"):
+    """
+    Convert speech to text using Google Cloud Speech-to-Text API
+    """
+    try:
+        # Try to get the client from our cloud manager
+        try:
+            from utils.google_cloud import cloud_manager
+            client = cloud_manager.get_stt_client()
+            
+            if client is None:
+                logger.warning("STT client not available, using fallback mechanism")
+                return generate_fallback_stt(audio_data)
+        except Exception as e:
+            logger.error(f"Error getting STT client: {e}")
+            return generate_fallback_stt(audio_data)
+        
+        # Configure audio and recognition parameters
+        audio = speech.RecognitionAudio(content=audio_data)
         config = speech.RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=settings.RATE,
-            language_code="en-US",
-            enable_automatic_punctuation=True,
-            model="latest_long",
-            use_enhanced=True,
-            speech_contexts=[speech_contexts],
-            enable_speaker_diarization=False,
-            diarization_speaker_count=1,
-            profanity_filter=False
+            sample_rate_hertz=16000,
+            language_code=language_code,
+            model=model,
+            enable_automatic_punctuation=True
         )
-    
-    try:
-        response = speech_client.recognize(config=config, audio=audio)
         
+        # Perform the API call
+        response = client.recognize(config=config, audio=audio)
+        
+        # Extract and return the transcription
         transcript = ""
         for result in response.results:
             transcript += result.alternatives[0].transcript
         
+        if not transcript:
+            logger.warning("No transcript returned from Speech-to-Text")
+            transcript = generate_fallback_stt(audio_data)
+            
         return transcript
+        
     except Exception as e:
-        print(f"Speech recognition error: {str(e)}")
-        return "Error transcribing audio. Please try again."
+        logger.error(f"Error in speech_to_text: {e}")
+        logger.error(traceback.format_exc())
+        return generate_fallback_stt(audio_data)
+
+def generate_fallback_tts(text):
+    """
+    Generate a fallback TTS response when the service is unavailable
+    """
+    logger.info("Using fallback TTS mechanism")
+    
+    # In a real system, you might use a local TTS library here
+    # For now, we'll just create a simple WAV file with silence
+    
+    # Create an empty WAV file with the right header (8 kHz, 16-bit, mono)
+    sample_rate = 8000
+    duration = 1.0  # 1 second of silence
+    num_samples = int(sample_rate * duration)
+    
+    buffer = io.BytesIO()
+    
+    # WAV header
+    buffer.write(b'RIFF')
+    buffer.write((36 + num_samples * 2).to_bytes(4, 'little'))  # File size
+    buffer.write(b'WAVE')
+    buffer.write(b'fmt ')
+    buffer.write((16).to_bytes(4, 'little'))  # Format chunk size
+    buffer.write((1).to_bytes(2, 'little'))  # Format type (PCM)
+    buffer.write((1).to_bytes(2, 'little'))  # Number of channels
+    buffer.write((sample_rate).to_bytes(4, 'little'))  # Sample rate
+    buffer.write((sample_rate * 2).to_bytes(4, 'little'))  # Byte rate
+    buffer.write((2).to_bytes(2, 'little'))  # Block align
+    buffer.write((16).to_bytes(2, 'little'))  # Bits per sample
+    buffer.write(b'data')
+    buffer.write((num_samples * 2).to_bytes(4, 'little'))  # Data chunk size
+    
+    # Write silence (all zeros)
+    for _ in range(num_samples):
+        buffer.write((0).to_bytes(2, 'little'))
+    
+    # Return the WAV file as bytes
+    buffer.seek(0)
+    return buffer.read()
+
+def generate_fallback_stt(audio_data):
+    """
+    Generate a fallback STT response when the service is unavailable
+    """
+    logger.info("Using fallback STT mechanism")
+    
+    # In a real system, you might use a local STT library here
+    # For now, just return a placeholder message
+    return "[Speech recognition unavailable. Please try again later.]"
