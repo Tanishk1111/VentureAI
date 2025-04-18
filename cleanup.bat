@@ -8,18 +8,36 @@ if not exist backup mkdir backup
 
 REM Move test files to backup folder
 echo Moving test files to backup...
-move test_*.py backup\ 2>nul
-move local_test.py backup\ 2>nul
-move simple_client.py backup\ 2>nul
-move interview_client.py backup\ 2>nul
-move interactive_interview.py backup\ 2>nul
-move fixed_client.py backup\ 2>nul
+if exist test_*.py (
+    move test_*.py backup\
+)
+if exist local_test.py (
+    move local_test.py backup\
+)
+if exist simple_client.py (
+    move simple_client.py backup\
+)
+if exist interview_client.py (
+    move interview_client.py backup\
+)
+if exist interactive_interview.py (
+    move interactive_interview.py backup\
+)
+if exist fixed_client.py (
+    move fixed_client.py backup\
+)
 
 REM Move documentation that's not needed in production
 echo Moving development documentation...
-move FIXES.md backup\ 2>nul
-move client_readme.md backup\ 2>nul
-move gcp_setup.md backup\ 2>nul
+if exist FIXES.md (
+    move FIXES.md backup\
+)
+if exist client_readme.md (
+    move client_readme.md backup\
+)
+if exist gcp_setup.md (
+    move gcp_setup.md backup\
+)
 
 REM Clear out session data
 echo Cleaning session data...
