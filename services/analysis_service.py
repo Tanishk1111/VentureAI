@@ -1,5 +1,5 @@
 import asyncio
-from utils.gemini_utils import generate_content, analyze_sentiment_with_gemini, generate_feedback_with_examples
+from utils.gemini_utils import generate_content, generate_feedback_with_examples
 from config import settings
 import os
 import logging
@@ -207,7 +207,15 @@ def generate_interview_feedback(session):
         Format the feedback as a cohesive essay that would be helpful to the candidate.
         """
         
-        response = model.generate_content(prompt, temperature=0.2)
+        # Set up the generation config instead of passing temperature directly
+        generation_config = {
+            "temperature": 0.2,
+            "top_p": 0.95,
+            "top_k": 40,
+            "max_output_tokens": 8192,
+        }
+        
+        response = model.generate_content(prompt, generation_config=generation_config)
         
         return {"feedback": response.text}
             

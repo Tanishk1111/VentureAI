@@ -22,12 +22,14 @@ git add .
 REM Commit changes
 git commit -m "Initial commit for VentureAI deployment"
 
-REM Prompt for GitHub repository URL
-set /p repo_url=Enter your GitHub repository URL (e.g., https://github.com/username/repo.git): 
+REM Set default repository URL
+set default_repo_url=https://github.com/Tanishk1111/VentureAI.git
+set /p repo_url=Enter your GitHub repository URL (default: %default_repo_url%): 
 
+REM Use default if empty
 if "%repo_url%"=="" (
-    echo No repository URL provided. Exiting.
-    exit /b 1
+    set repo_url=%default_repo_url%
+    echo Using default repository: %repo_url%
 )
 
 REM Add remote and push

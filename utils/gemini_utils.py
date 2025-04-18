@@ -17,33 +17,37 @@ def get_gemini_model(model_name=None):
 
 def generate_content(prompt, model_name=None, temperature=0.7, system_instruction=None):
     """Generate content using Gemini with enhanced controls"""
-    model = get_gemini_model(model_name)
-    
-    generation_config = {
-        "temperature": temperature,
-        "top_p": 0.95,
-        "top_k": 40,
-        "max_output_tokens": 8192,
-    }
-    
-    # Use the chat format which allows for system instructions
-    if system_instruction:
-        response = model.generate_content(
-            contents=[
-                {"role": "system", "parts": [system_instruction]},
-                {"role": "user", "parts": [prompt]}
-            ],
-            generation_config=generation_config
-        )
-    else:
-        response = model.generate_content(
-            contents=prompt,
-            generation_config=generation_config
-        )
-    
-    if hasattr(response, 'text'):
-        return response.text
-    return str(response)
+    try:
+        model = get_gemini_model(model_name)
+        
+        generation_config = {
+            "temperature": temperature,
+            "top_p": 0.95,
+            "top_k": 40,
+            "max_output_tokens": 8192,
+        }
+        
+        # Use the chat format which allows for system instructions
+        if system_instruction:
+            response = model.generate_content(
+                contents=[
+                    {"role": "system", "parts": [system_instruction]},
+                    {"role": "user", "parts": [prompt]}
+                ],
+                generation_config=generation_config
+            )
+        else:
+            response = model.generate_content(
+                contents=prompt,
+                generation_config=generation_config
+            )
+        
+        if hasattr(response, 'text'):
+            return response.text
+        return str(response)
+    except Exception as e:
+        print(f"Error generating content: {e}")
+        return f"Content generation error: {str(e)}"
 
 def analyze_sentiment_with_gemini(text):
     """Analyze sentiment using Gemini with structured output"""
@@ -182,13 +186,24 @@ def generate_cv_questions_enhanced(cv_text):
         if not questions:
             questions = [line.strip() for line in questions_text.split('\n') if line.strip() and line.strip().endswith('?')]
         
-        return questions[:5]  # Return up to 5 questions
+        if not questions:
+            # If still no questions, use a more basic extraction
+            questions = [line.strip() for line in questions_text.split('\n') if '?' in line]
+            
+        # Clean and format the questions
+        clean_questions = []
+        for q in questions:
+            q = q.strip()
+            if q and q not in clean_questions:
+                clean_questions.append(q)
+        
+        return clean_questions[:5]  # Return up to 5 questions
     except Exception as e:
         print(f"Error generating CV questions: {e}")
         return [
-            "Based on your experience at {}, what key metrics did you track to measure success?",
-            "How would you apply your background in {} to build a scalable startup?",
+            "Based on your experience, what key metrics did you track to measure success?",
+            "How would you apply your background to build a scalable startup?",
             "What's the biggest market opportunity you've identified from your work so far?",
-            "How does your experience in {} give you unique insights for this venture?",
+            "How does your experience give you unique insights for this venture?",
             "What specific challenges from your past roles are you best equipped to handle as a founder?"
         ]

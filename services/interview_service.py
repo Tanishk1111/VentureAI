@@ -26,22 +26,40 @@ class InterviewSession:
     def _load_questions(self):
         """Load interview questions from CSV"""
         try:
-            return pd.read_csv(settings.QUESTIONS_CSV)
+            # Try loading from the settings.QUESTIONS_CSV path
+            df = pd.read_csv(settings.QUESTIONS_CSV)
+            print(f"Successfully loaded questions from {settings.QUESTIONS_CSV}")
+            return df
         except Exception as e:
-            print(f"Error loading questions: {e}")
-            # Create a default dataframe with sample questions
-            return pd.DataFrame({
-                'Question': [
-                    'Can you explain your business model?',
-                    'What is your target market?',
-                    'How do you plan to scale your business?'
-                ],
-                'Expected Response': [
-                    'Clear explanation of value proposition and revenue generation.',
-                    'Specific demographic or market segment with justification.',
-                    "Detailed growth strategy that's realistic and achievable."
-                ]
-            })
+            print(f"Error loading questions from {settings.QUESTIONS_CSV}: {e}")
+            
+            # Try the alternative path
+            try:
+                alt_path = settings.questions_csv_path
+                df = pd.read_csv(alt_path)
+                print(f"Successfully loaded questions from alternate path {alt_path}")
+                return df
+            except Exception as e2:
+                print(f"Error loading questions from alternate path {alt_path}: {e2}")
+                
+                # Create a default dataframe with sample questions
+                print("Creating default questions")
+                return pd.DataFrame({
+                    'Question': [
+                        'Can you explain your business model?',
+                        'What is your target market?',
+                        'How do you plan to scale your business?',
+                        'What is your customer acquisition strategy?',
+                        'How do you differentiate from competitors?'
+                    ],
+                    'Expected Response': [
+                        'Clear explanation of value proposition and revenue generation.',
+                        'Specific demographic or market segment with justification.',
+                        "Detailed growth strategy that's realistic and achievable.",
+                        'Cost-effective marketing and sales approach.',
+                        'Unique value proposition and competitive advantages.'
+                    ]
+                })
     
     def record_interaction(self, speaker, text, audio_data=None):
         """Record an interaction in the session transcript"""

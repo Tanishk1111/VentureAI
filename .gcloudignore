@@ -15,5 +15,41 @@
 
 # Python pycache:
 __pycache__/
+*.py[cod]
+*$py.class
+
 # Ignored by the build system
 /setup.cfg
+
+# Test and development files
+test_*.py
+local_test.py
+simple_client.py
+interview_client.py
+interactive_interview.py
+fixed_client.py
+FIXES.md
+client_readme.md
+deploy_to_github.bat
+gcp_setup.md
+start_app.bat
+.env.sample
+
+# Don't include existing sessions folder in deployment
+sessions/
+# Only leave empty uploads directory
+uploads/*
+!uploads/.gitkeep
+
+# Documentation files not needed in production
+README.md
+
+# Temporary files
+*.log
+*.bak
+*.swp
+*.tmp
+
+# Local environment
+.vscode/
+.idea/

@@ -6,6 +6,9 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.middleware.gzip import GZipMiddleware
+from dotenv import load_dotenv
+load_dotenv()  # This loads the .env file
+
 
 # Setup basic logging
 logging.basicConfig(
@@ -160,14 +163,16 @@ try:
     # Import interview router
     from routers import interview
     app.include_router(interview.router)
-    logger.info("Successfully loaded interview router")
+    # Register compatibility routes
+    interview.add_compatibility_routes(app)
+    logger.info("Successfully loaded interview router with compatibility routes")
 except Exception as e:
     logger.error(f"Error importing interview router: {e}")
     logger.error(traceback.format_exc())
     # Add a placeholder endpoint to indicate the feature would be here
     @app.get("/interview")
     async def interview_placeholder():
-        return {"status": "Interview module not available", "reason": str(e)}
+        return {"status": "Interview module not available", "message": "The interview functionality is not fully configured", "error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
