@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 load_dotenv()  # This loads the .env file
 
 
+
+
 # Setup basic logging
 logging.basicConfig(
     level=logging.INFO,
