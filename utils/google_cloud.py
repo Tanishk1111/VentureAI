@@ -106,6 +106,47 @@ class GoogleCloudManager:
         """Check if manager is initialized"""
         return self.initialized
 
+    def init_tts(self):
+        try:
+            self.tts = texttospeech.TextToSpeechClient()
+            self._services_status['tts'] = True
+            
+            # Get available voices
+            voices_response = self.tts.list_voices(language_code="en-US")
+            voices = voices_response.voices
+            
+            # Look for advanced voices in order of preference
+            voice_categories = [
+                [v.name for v in voices if "Chirp3-HD" in v.name],
+                [v.name for v in voices if "Chirp-HD" in v.name],
+                [v.name for v in voices if "Studio" in v.name],
+                [v.name for v in voices if "Neural2" in v.name],
+                [v.name for v in voices if "Wavenet" in v.name]
+            ]
+            
+            # Store information about available voices
+            self._service_info['tts_voices'] = {
+                'chirp3_hd': voice_categories[0],
+                'chirp_hd': voice_categories[1],
+                'studio': voice_categories[2], 
+                'neural2': voice_categories[3],
+                'wavenet': voice_categories[4]
+            }
+            
+            # Determine best available voice
+            for category in voice_categories:
+                if category:
+                    self._service_info['tts_best_voice'] = category[0]
+                    self._service_info['tts_voice_type'] = category[0].split('-')[2] if len(category[0].split('-')) > 2 else 'Standard'
+                    break
+            
+            logging.info(f"TTS initialized with best voice: {self._service_info.get('tts_best_voice', 'Default')}")
+            return True
+        except Exception as e:
+            logging.error(f"Error initializing TTS: {e}")
+            self._services_status['tts'] = False
+            return False
+
 # Create an instance for global use
 cloud_manager = GoogleCloudManager()
 

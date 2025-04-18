@@ -71,10 +71,11 @@ app = FastAPI(
 # Setup CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For development; restrict in production
+    allow_origins=["*"],  # For development, replace with actual origins in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Voice-Used", "X-Voice-Type"]  # Expose custom headers for the frontend
 )
 
 # Add GZip compression

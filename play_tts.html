@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TTS Player</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 20px auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .player-container {
+        background-color: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #333;
+      }
+      audio {
+        width: 100%;
+        margin: 20px 0;
+      }
+      button {
+        background-color: #4285f4;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        margin-right: 10px;
+      }
+      button:hover {
+        background-color: #3b78e7;
+      }
+      .status {
+        margin-top: 20px;
+        padding: 10px;
+        background-color: #f0f0f0;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="player-container">
+      <h1>Simple TTS Player</h1>
+
+      <p>This page plays the generated TTS audio file.</p>
+
+      <audio id="audioPlayer" controls>
+        <source src="test_tts.mp3" type="audio/mpeg" />
+        Your browser does not support the audio element.
+      </audio>
+
+      <div>
+        <button onclick="playAudio()">Play</button>
+        <button onclick="pauseAudio()">Pause</button>
+        <button onclick="reload()">Reload Audio</button>
+      </div>
+
+      <div class="status" id="status">Status: Ready</div>
+    </div>
+
+    <script>
+      const audioPlayer = document.getElementById("audioPlayer");
+      const status = document.getElementById("status");
+
+      function updateStatus(message) {
+        const timestamp = new Date().toISOString().substring(11, 19);
+        status.innerHTML += `<br>[${timestamp}] ${message}`;
+      }
+
+      function playAudio() {
+        audioPlayer.play();
+        updateStatus("Playing audio...");
+      }
+
+      function pauseAudio() {
+        audioPlayer.pause();
+        updateStatus("Audio paused");
+      }
+
+      function reload() {
+        // Add timestamp to force reload
+        const timestamp = new Date().getTime();
+        audioPlayer.src = `test_tts.mp3?t=${timestamp}`;
+        updateStatus("Audio reloaded");
+      }
+
+      // Event listeners
+      audioPlayer.addEventListener("ended", () => {
+        updateStatus("Audio playback completed");
+      });
+
+      audioPlayer.addEventListener("error", (e) => {
+        updateStatus(
+          `Error: ${
+            e.target.error.message || "Audio file not found or cannot be played"
+          }`
+        );
+      });
+
+      // On load
+      updateStatus("Page loaded. Click Play to start audio.");
+    </script>
+  </body>
+</html>

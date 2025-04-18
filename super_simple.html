@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Super Simple TTS Player</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 50px;
+        text-align: center;
+      }
+      audio {
+        margin: 20px 0;
+      }
+      button {
+        padding: 10px 20px;
+        background-color: #4285f4;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Super Simple TTS Player</h1>
+    <p>
+      This plays the simple TTS MP3 file without any complex JavaScript or
+      server requirements.
+    </p>
+
+    <audio id="player" controls>
+      <source src="super_simple.mp3" type="audio/mpeg" />
+      Your browser does not support audio playback.
+    </audio>
+
+    <div>
+      <button onclick="document.getElementById('player').play()">Play</button>
+      <button onclick="document.getElementById('player').pause()">Pause</button>
+      <button onclick="window.location.reload()">Reload Page</button>
+    </div>
+
+    <p>
+      If audio doesn't play, make sure the MP3 file has been generated
+      successfully.
+    </p>
+  </body>
+</html>

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flask TTS Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      textarea {
+        width: 100%;
+        height: 100px;
+        margin-bottom: 10px;
+        padding: 10px;
+        font-family: inherit;
+      }
+      button {
+        padding: 10px 20px;
+        background-color: #4285f4;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-right: 10px;
+        margin-bottom: 10px;
+      }
+      #status {
+        margin-top: 20px;
+        padding: 15px;
+        background-color: #f5f5f5;
+        border-radius: 4px;
+        min-height: 20px;
+      }
+      #audioPlayer {
+        width: 100%;
+        margin-top: 20px;
+        display: none;
+      }
+      .options {
+        margin: 15px 0;
+        padding: 10px;
+        background-color: #f9f9f9;
+        border-radius: 4px;
+      }
+      .options label {
+        margin-right: 10px;
+      }
+      .options input {
+        width: 60px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Flask TTS with Google Chirp 3 HD</h1>
+
+    <textarea id="textInput" placeholder="Enter text to convert to speech...">
+Hello, this is a test of the Google Chirp 3 HD voice. This is a high-quality voice that sounds natural and expressive.</textarea
+    >
+
+    <div class="options">
+      <label
+        >Speed:
+        <input
+          type="number"
+          id="speedInput"
+          value="1.0"
+          min="0.25"
+          max="4.0"
+          step="0.05"
+      /></label>
+      <label
+        >Pitch:
+        <input
+          type="number"
+          id="pitchInput"
+          value="0.2"
+          min="-20.0"
+          max="20.0"
+          step="0.1"
+      /></label>
+    </div>
+
+    <div>
+      <button id="testFlaskTTS">Play with Flask + Chirp 3 HD</button>
+      <button id="testBrowserTTS">Play with Browser Voice</button>
+    </div>
+
+    <div id="status">Status: Ready</div>
+    <audio id="audioPlayer" controls></audio>
+
+    <script>
+      // Local Flask server endpoint
+      const FLASK_API_URL = "http://127.0.0.1:5000";
+      // Production endpoint
+      const PROD_API_URL = "https://ventureai-840537625469.us-central1.run.app";
+
+      // DOM elements
+      const textInput = document.getElementById("textInput");
+      const speedInput = document.getElementById("speedInput");
+      const pitchInput = document.getElementById("pitchInput");
+      const testFlaskTTSBtn = document.getElementById("testFlaskTTS");
+      const testBrowserTTSBtn = document.getElementById("testBrowserTTS");
+      const status = document.getElementById("status");
+      const audioPlayer = document.getElementById("audioPlayer");
+
+      // Add event listeners
+      testFlaskTTSBtn.addEventListener("click", testFlaskTTS);
+      testBrowserTTSBtn.addEventListener("click", testBrowserTTS);
+
+      // Update status
+      function updateStatus(message) {
+        const timestamp = new Date().toISOString().substring(11, 19);
+        status.innerHTML += `<br>[${timestamp}] ${message}`;
+        status.scrollTop = status.scrollHeight;
+      }
+
+      // Clear status
+      function clearStatus() {
+        status.innerHTML = "Status: Ready";
+      }
+
+      // Test Flask TTS
+      async function testFlaskTTS() {
+        clearStatus();
+
+        // Skip server calls and use local MP3 file directly
+        updateStatus("Using pre-generated MP3 file instead of server...");
+
+        const audioUrl = "super_simple.mp3?t=" + new Date().getTime();
+        audioPlayer.src = audioUrl;
+        audioPlayer.style.display = "block";
+
+        // Play audio
+        audioPlayer.oncanplaythrough = () => {
+          updateStatus("Audio loaded. Playing with Standard voice");
+          audioPlayer.play();
+        };
+
+        audioPlayer.onended = () => {
+          updateStatus("Audio playback completed");
+        };
+
+        audioPlayer.onerror = (e) => {
+          updateStatus(
+            `Error loading audio: ${
+              e.target.error ? e.target.error.message : "Unknown error"
+            }`
+          );
+          console.error("Audio error:", e);
+          // Fall back to browser TTS
+          updateStatus("Falling back to browser TTS...");
+          testBrowserTTS();
+        };
+      }
+
+      // Test browser TTS
+      function testBrowserTTS() {
+        const text = textInput.value.trim();
+        if (!text) {
+          updateStatus("Error: Please enter some text");
+          return;
+        }
+
+        if (!window.speechSynthesis) {
+          updateStatus("Error: Browser does not support speech synthesis");
+          return;
+        }
+
+        // Hide audio player
+        audioPlayer.style.display = "none";
+
+        // Clear any previous utterance
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = parseFloat(speedInput.value);
+        utterance.pitch = parseFloat(pitchInput.value);
+
+        // Get available voices
+        const voices = window.speechSynthesis.getVoices();
+        updateStatus(`Available browser voices: ${voices.length}`);
+
+        // Try to find a good voice
+        const preferredVoice = voices.find(
+          (v) =>
+            v.name.includes("Google") ||
+            v.name.includes("Microsoft") ||
+            v.name.includes("Premium")
+        );
+
+        if (preferredVoice) {
+          utterance.voice = preferredVoice;
+          updateStatus(`Using browser voice: ${preferredVoice.name}`);
+        } else if (voices.length > 0) {
+          utterance.voice = voices[0];
+          updateStatus(`Using default browser voice: ${voices[0].name}`);
+        }
+
+        utterance.onend = () => {
+          updateStatus("Browser TTS playback completed");
+        };
+
+        utterance.onerror = (e) => {
+          updateStatus(`Browser TTS error: ${e.error}`);
+        };
+
+        updateStatus("Playing audio using browser TTS...");
+        window.speechSynthesis.speak(utterance);
+      }
+
+      // Initialize voices
+      if (window.speechSynthesis) {
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+          window.speechSynthesis.onvoiceschanged = () => {
+            const voices = window.speechSynthesis.getVoices();
+            console.log(
+              "Loaded voices:",
+              voices.map((v) => v.name)
+            );
+          };
+        }
+
+        // Force loading voices
+        window.speechSynthesis.getVoices();
+      }
+    </script>
+  </body>
+</html>

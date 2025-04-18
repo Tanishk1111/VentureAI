@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Direct TTS Test</title>
+    <style>
+      body {
+        font-family: Arial;
+        margin: 20px;
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      button {
+        padding: 10px;
+        margin: 10px 0;
+        background: #4285f4;
+        color: white;
+        border: none;
+        border-radius: 4px;
+      }
+      #log {
+        background: #f1f1f1;
+        padding: 10px;
+        border-radius: 4px;
+        white-space: pre-wrap;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Direct TTS Test (Production API)</h1>
+
+    <button id="testDirectTTS">Test Chirp 3 HD</button>
+    <button id="testFallback">Test Fallback</button>
+    <div id="log">Status: Ready</div>
+
+    <script>
+      // Production endpoint that we know works
+      const PROD_API_URL = "https://ventureai-840537625469.us-central1.run.app";
+      const log = document.getElementById("log");
+
+      document
+        .getElementById("testDirectTTS")
+        .addEventListener("click", testDirectTTS);
+      document
+        .getElementById("testFallback")
+        .addEventListener("click", testFallbackTTS);
+
+      async function logWithTimestamp(message) {
+        const timestamp = new Date().toISOString().substr(11, 8);
+        log.textContent += `\n[${timestamp}] ${message}`;
+        log.scrollTop = log.scrollHeight;
+      }
+
+      async function testDirectTTS() {
+        logWithTimestamp(
+          "Using local pre-generated MP3 file instead of API..."
+        );
+
+        try {
+          // Use the local MP3 file directly
+          const audioUrl = "super_simple.mp3?t=" + new Date().getTime();
+
+          // Create an audio element
+          const audio = new Audio(audioUrl);
+
+          audio.oncanplaythrough = () => {
+            logWithTimestamp("Audio loaded, playing now...");
+            audio.play();
+          };
+
+          audio.onended = () => {
+            logWithTimestamp("Audio playback completed");
+          };
+
+          audio.onerror = (e) => {
+            logWithTimestamp(
+              `Audio error: ${
+                e.target.error ? e.target.error.message : "Unknown error"
+              }`
+            );
+            // Try fallback
+            logWithTimestamp("Trying browser TTS fallback...");
+            testFallbackTTS();
+          };
+        } catch (error) {
+          logWithTimestamp(`ERROR: ${error.message}`);
+          console.error("Error:", error);
+        }
+      }
+
+      async function testFallbackTTS() {
+        logWithTimestamp("Testing browser TTS fallback...");
+
+        if (!window.speechSynthesis) {
+          logWithTimestamp("ERROR: Browser doesn't support speech synthesis");
+          return;
+        }
+
+        const text =
+          "This is a test of the browser's built-in text-to-speech capabilities as a fallback option.";
+        const utterance = new SpeechSynthesisUtterance(text);
+
+        // Try to get a good voice
+        const voices = window.speechSynthesis.getVoices();
+        logWithTimestamp(`Available voices: ${voices.length}`);
+
+        const preferredVoice = voices.find(
+          (v) =>
+            v.name.includes("Google") ||
+            v.name.includes("Microsoft") ||
+            v.name.includes("Premium")
+        );
+
+        if (preferredVoice) {
+          utterance.voice = preferredVoice;
+          logWithTimestamp(`Using browser voice: ${preferredVoice.name}`);
+        } else if (voices.length > 0) {
+          utterance.voice = voices[0];
+          logWithTimestamp(`Using default browser voice: ${voices[0].name}`);
+        }
+
+        utterance.onend = () => {
+          logWithTimestamp("Browser TTS playback completed");
+        };
+
+        utterance.onerror = (e) => {
+          logWithTimestamp(`Browser TTS error: ${e.error}`);
+        };
+
+        window.speechSynthesis.speak(utterance);
+      }
+
+      // Initialize voices
+      if (window.speechSynthesis) {
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+          window.speechSynthesis.onvoiceschanged = () => {
+            const voices = window.speechSynthesis.getVoices();
+            logWithTimestamp(`Loaded ${voices.length} browser voices`);
+          };
+        }
+
+        // Force loading voices
+        window.speechSynthesis.getVoices();
+      }
+    </script>
+  </body>
+</html>

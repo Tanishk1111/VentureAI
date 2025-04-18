@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks, Depends
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks, Depends, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 import io
@@ -7,11 +7,24 @@ import time
 import logging
 from typing import Optional, List, Dict, Any
 import json
+from sqlalchemy.orm import Session
+from google.cloud import texttospeech
 
 # Import the GoogleCloudManager
 from utils.google_cloud import cloud_manager
 
-router = APIRouter(prefix="/interview", tags=["interview"])
+from db.database import get_db
+from models.interview import TextToSpeechRequest
+
+# Setup logger
+logger = logging.getLogger("interview_router")
+
+# Create the router
+router = APIRouter(
+    prefix="/interview",
+    tags=["interview"],
+    responses={404: {"description": "Not found"}},
+)
 
 # Storage for active sessions
 active_sessions = {}
@@ -35,10 +48,6 @@ class ResponseSubmission(BaseModel):
 class FeedbackRequest(BaseModel):
     session_id: str
     detailed: bool = False
-    
-class TextToSpeechRequest(BaseModel):
-    text: str
-    session_id: Optional[str] = None
 
 # Helper functions
 def load_session(session_id: str) -> dict:
@@ -86,22 +95,22 @@ async def create_interview_session(
     try:
         # Generate session ID
         session_id = f"session_{int(time.time())}"
-        
-        # Process CV if provided
+    
+    # Process CV if provided
         cv_path = None
-        if cv_file:
+    if cv_file:
             # Create uploads directory
             os.makedirs("uploads", exist_ok=True)
             
             # Save the file
-            file_content = await cv_file.read()
+        file_content = await cv_file.read()
             filename = f"{session_id}_{cv_file.filename}"
             cv_path = os.path.join("uploads", filename)
             
             with open(cv_path, "wb") as f:
                 f.write(file_content)
-        
-        # Create session
+    
+    # Create session
         session = {
             "session_id": session_id,
             "cv_path": cv_path,
@@ -113,11 +122,11 @@ async def create_interview_session(
         # Save session
         active_sessions[session_id] = session
         save_session(session)
-        
-        return {
+    
+    return {
             "session_id": session_id,
             "has_cv": cv_path is not None
-        }
+    }
     except Exception as e:
         logging.error(f"Error creating session: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create session: {str(e)}")
@@ -222,12 +231,12 @@ async def get_next_question(request: QuestionRequest):
             available_questions = [q for q in predefined_questions if q not in asked_questions]
             
             if not available_questions:
-                return {
-                    "session_id": request.session_id,
-                    "question": None,
-                    "interview_complete": True
-                }
-                
+        return {
+            "session_id": request.session_id,
+            "question": None,
+            "interview_complete": True
+        }
+    
             question = available_questions[0]
         
         # Add to session
@@ -261,14 +270,14 @@ async def get_next_question(request: QuestionRequest):
                     f.write(audio_data)
             except Exception as e:
                 logging.error(f"Error generating audio: {str(e)}")
-        
-        return {
-            "session_id": request.session_id,
-            "question": question,
+    
+    return {
+        "session_id": request.session_id,
+        "question": question,
             "question_id": str(len(session["questions"]) - 1),
             "has_audio": audio_data is not None,
-            "interview_complete": False
-        }
+        "interview_complete": False
+    }
     except Exception as e:
         logging.error(f"Error getting question: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get question: {str(e)}")
@@ -298,8 +307,8 @@ async def submit_response(
             raise HTTPException(status_code=400, detail="No text response provided")
             
         # Save response
-        response_data = {
-            "question_id": question_id,
+    response_data = {
+        "question_id": question_id,
             "text": text,
             "audio_path": None,
             "timestamp": time.time()
@@ -467,62 +476,124 @@ Your pitch is compelling but would benefit from more concrete examples of tracti
 You demonstrate good knowledge of your business fundamentals. Continue to deepen your market analysis and financial projections to strengthen your overall presentation.
     """
 
-@router.post("/text-to-speech", response_class=StreamingResponse)
-async def convert_text_to_speech(request: TextToSpeechRequest):
-    """Convert text to speech"""
+@router.post("/tts", response_class=StreamingResponse)
+async def text_to_speech(request: TextToSpeechRequest, db: Session = Depends(get_db)):
+    """
+    Convert text to speech using Google Cloud Text-to-Speech.
+    Returns audio file with voice information in headers.
+    """
+    start_time = time.time()
+    logger = logging.getLogger("interview_router")
+    
+    # Check if Text-to-Speech service is available
+    client = get_tts_client()
+    if not client:
+        raise HTTPException(
+            status_code=503, 
+            detail="Text-to-Speech service unavailable"
+        )
+    
     try:
-        if not cloud_manager or not hasattr(cloud_manager, 'tts_client'):
-            raise HTTPException(status_code=500, detail="Text-to-speech service not available")
+        # Select the best available voice
+        voice_name = _get_best_available_voice(client)
+        
+        # Determine voice type (Chirp HD, Studio, Neural2, etc.)
+        voice_type = "Standard"
+        if "Chirp3-HD" in voice_name:
+            voice_type = "Chirp 3 HD"
+        elif "Studio" in voice_name:
+            voice_type = "Studio"
+        elif "Neural2" in voice_name:
+            voice_type = "Neural2"
+        elif "Wavenet" in voice_name:
+            voice_type = "Wavenet"
             
-        # Convert to speech
-        from google.cloud import texttospeech
-        
-        text_input = texttospeech.SynthesisInput(text=request.text)
+        # Configure the voice
         voice = texttospeech.VoiceSelectionParams(
+            name=voice_name,
             language_code="en-US",
-            ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
         )
+        
+        # Configure audio settings
         audio_config = texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.MP3
+            audio_encoding=texttospeech.AudioEncoding.MP3,
+            speaking_rate=request.speed,
+            pitch=request.pitch,
+            volume_gain_db=1.0  # Slightly louder
         )
         
-        response = cloud_manager.tts_client.synthesize_speech(
-            input=text_input,
-            voice=voice,
-            audio_config=audio_config
-        )
-        
-        # Store in session if requested
-        if request.session_id:
-            try:
-                session = load_session(request.session_id)
-                if "tts_history" not in session:
-                    session["tts_history"] = []
-                    
-                audio_path = os.path.join(SESSIONS_DIR, request.session_id, f"tts_{int(time.time())}.mp3")
-                os.makedirs(os.path.dirname(audio_path), exist_ok=True)
+        # Prepare the synthesis input
+        # Use SSML for Chirp HD and Studio voices for better quality
+        try:
+            if "Chirp" in voice_name or "Studio" in voice_name:
+                ssml = f"""
+                <speak>
+                  <prosody rate="{request.speed}" pitch="{request.pitch}%" volume="loud">
+                    {request.text}
+                  </prosody>
+                </speak>
+                """
+                synthesis_input = texttospeech.SynthesisInput(ssml=ssml)
                 
-                with open(audio_path, "wb") as f:
-                    f.write(response.audio_content)
-                    
-                session["tts_history"].append({
-                    "text": request.text,
-                    "audio_path": audio_path,
-                    "timestamp": time.time()
-                })
+                # Generate the speech
+                logger.info(f"Generating speech with voice: {voice_name} (using SSML)")
+                response = client.synthesize_speech(
+                    input=synthesis_input,
+                    voice=voice,
+                    audio_config=audio_config
+                )
+            else:
+                synthesis_input = texttospeech.SynthesisInput(text=request.text)
                 
-                save_session(session)
-            except Exception as e:
-                logging.error(f"Error saving TTS to session: {str(e)}")
+                # Generate the speech
+                logger.info(f"Generating speech with voice: {voice_name} (using plain text)")
+                response = client.synthesize_speech(
+                    input=synthesis_input,
+                    voice=voice,
+                    audio_config=audio_config
+                )
+        except Exception as e:
+            # Fall back to plain text if SSML fails
+            logger.warning(f"SSML synthesis failed: {e}. Trying with plain text.")
+            synthesis_input = texttospeech.SynthesisInput(text=request.text)
+            
+            # Generate the speech
+            logger.info(f"Generating speech with voice: {voice_name} (fallback to plain text)")
+            response = client.synthesize_speech(
+                input=synthesis_input,
+                voice=voice,
+                audio_config=audio_config
+            )
         
-        # Return audio as streaming response
-        return StreamingResponse(
-            io.BytesIO(response.audio_content),
-            media_type="audio/mp3"
+        # Create response headers with voice information
+        headers = {
+            "Content-Type": "audio/mpeg",
+            "X-Voice-Used": voice_name,
+            "X-Voice-Type": voice_type,
+            "Access-Control-Expose-Headers": "X-Voice-Used, X-Voice-Type",
+            "Cache-Control": "no-cache"
+        }
+        
+        # Log usage if session_id is provided
+        if hasattr(request, 'session_id') and request.session_id:
+            _log_tts_usage(db, request.session_id, request.text, voice_name)
+            
+        # Return the audio with headers
+        process_time = time.time() - start_time
+        logger.info(f"TTS processing completed in {process_time:.2f} seconds")
+        
+    return StreamingResponse(
+            iter([response.audio_content]), 
+            media_type="audio/mpeg",
+            headers=headers
         )
+        
     except Exception as e:
-        logging.error(f"Error converting text to speech: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to convert text to speech: {str(e)}")
+        logger.error(f"Text-to-speech error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to convert text to speech: {str(e)}"
+    )
 
 @router.post("/speech-to-text", response_model=dict)
 async def convert_speech_to_text(
@@ -535,11 +606,11 @@ async def convert_speech_to_text(
             raise HTTPException(status_code=500, detail="Speech-to-text service not available")
             
         # Read audio file
-        audio_data = await audio_file.read()
-        
+    audio_data = await audio_file.read()
+    
         # Save file if session provided
         audio_path = None
-        if session_id:
+    if session_id:
             try:
                 session = load_session(session_id)
                 session_dir = os.path.join(SESSIONS_DIR, session_id)
@@ -615,6 +686,101 @@ async def delete_interview_session(session_id: str):
     except Exception as e:
         logging.error(f"Error deleting session: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete session: {str(e)}")
+
+# Helper functions for text-to-speech
+def get_tts_client():
+    """Get or initialize the Text-to-Speech client."""
+    try:
+        from google.cloud import texttospeech
+        client = texttospeech.TextToSpeechClient()
+        return client
+    except Exception as e:
+        logger.error(f"Failed to initialize Text-to-Speech client: {str(e)}")
+        return None
+
+def _get_best_available_voice(client):
+    """Find the best available voice from Google Cloud TTS."""
+    try:
+        # List available voices
+        voices_response = client.list_voices(language_code="en-US")
+        voice_names = [v.name for v in voices_response.voices]
+        
+        # Check for Chirp 3 HD voices first (highest quality)
+        chirp3_hd_voices = [
+            v for v in voice_names if "Chirp3-HD" in v
+        ]
+        
+        # Try to find best Chirp 3 HD voice
+        if chirp3_hd_voices:
+            # Prioritize specific good Chirp voices if available
+            priority_voices = [
+                "en-US-Chirp3-HD-Kore", 
+                "en-US-Chirp3-HD-Leda",
+                "en-US-Chirp3-HD-Aoede",
+                "en-US-Chirp3-HD-Charon",
+                "en-US-Chirp3-HD-Puck",
+                "en-US-Chirp3-HD-Zephyr"
+            ]
+            
+            # Try to find one of the priority voices first
+            for voice in priority_voices:
+                if voice in chirp3_hd_voices:
+                    logger.info(f"Using priority Chirp 3 HD voice: {voice}")
+                    return voice
+            
+            # Otherwise use the first available Chirp 3 HD voice
+            logger.info(f"Using Chirp 3 HD voice: {chirp3_hd_voices[0]}")
+            return chirp3_hd_voices[0]
+        
+        # Check for Studio voices next
+        studio_voices = [v for v in voice_names if "Studio" in v]
+        if studio_voices:
+            logger.info(f"Using Studio voice: {studio_voices[0]}")
+            return studio_voices[0]
+                
+        # Check for Neural2 voices
+        neural_voices = [v for v in voice_names if "Neural2" in v]
+        if neural_voices:
+            logger.info(f"Using Neural2 voice: {neural_voices[0]}")
+            return neural_voices[0]
+                
+        # Try WaveNet voices
+        wavenet_voices = [v for v in voice_names if "Wavenet" in v]
+        if wavenet_voices:
+            logger.info(f"Using WaveNet voice: {wavenet_voices[0]}")
+            return wavenet_voices[0]
+                
+        # Fall back to first available voice
+        if voice_names:
+            logger.info(f"Using standard voice: {voice_names[0]}")
+            return voice_names[0]
+            
+        # If we get here, no voices were found
+        logger.error("No voices available in Google Cloud TTS")
+        return "en-US-Standard-C"  # Default fallback
+            
+    except Exception as e:
+        logger.error(f"Error while listing voices: {str(e)}")
+        return "en-US-Standard-C"  # Default fallback
+
+def _log_tts_usage(db, session_id, text, voice):
+    """Log TTS usage to database."""
+    try:
+        # This would be implemented based on your database schema
+        # For example:
+        # db_log = TTSUsageLog(
+        #     session_id=session_id,
+        #     text=text,
+        #     voice=voice,
+        #     timestamp=datetime.now()
+        # )
+        # db.add(db_log)
+        # db.commit()
+        pass
+    except Exception as e:
+        logger.error(f"Failed to log TTS usage: {str(e)}")
+        # Continue without failing the main function
+        pass
 
 # Make sure the router is defined
 __all__ = ['router']
